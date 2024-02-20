@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 5000;
@@ -26,10 +26,58 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     const serviceCollection = client.db("carDoctor").collection("services");
+    const bookingCollection = client.db("carDoctor").collection("bookings");
 
     // main code here
     app.get("/services", async (req, res) => {
       const result = await serviceCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/services/:id", async (req, res) => {
+      const paramsId = req.params.id;
+      const query = { _id: new ObjectId(paramsId) };
+      const options = {
+        projection: { service_id: 1, title: 1, img: 1, price: 1 },
+      };
+      const result = await serviceCollection.findOne(query, options);
+      res.send(result);
+    });
+
+    // bookings part
+    app.post("/bookings", async (req, res) => {
+      const dataFromClient = req.body;
+      const result = await bookingCollection.insertOne(dataFromClient);
+      res.send(result);
+    });
+
+    app.get("/bookings", async (req, res) => {
+      //   console.log(req.query.email);
+      let query = {};
+      if (req.query.email) {
+        query = { email: req.query.email };
+      }
+      const result = await bookingCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.patch("/bookings/:id", async (req, res) => {
+      const paramsId = req.params.id;
+      const getUpdateData = req.body;
+      const filter = { _id: new ObjectId(paramsId) };
+      const updateDoc = {
+        $set: {
+          status: getUpdateData.status,
+        },
+      };
+      const result = await bookingCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    app.delete("/bookings/:id", async (req, res) => {
+      const ParamsId = req.params.id;
+      const query = { _id: new ObjectId(ParamsId) };
+      const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
     // main code here end
