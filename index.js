@@ -1,13 +1,21 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 
 // middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 
 // mongo code
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@miles12.5mxpsru.mongodb.net/?retryWrites=true&w=majority`;
@@ -21,15 +29,58 @@ const client = new MongoClient(uri, {
   },
 });
 
+// my middleware
+// just check
+const logger = async (req, res, next) => {
+  // console.log("called working:", req.hostname, req.originalUrl);
+  next();
+};
+// just check end
+const verifyTokenFirst = async (req, res, next) => {
+  const getToken = req.cookies.token;
+  // console.log("got middleware token:", getToken);
+  if (!getToken) {
+    res.status(401).send({ message: "not authorized" });
+  }
+  jwt.verify(getToken, process.env.ACCESS_TOKEN, (err, decoded) => {
+    // error
+    if (err) {
+      console.log(err);
+      res.status(401).send({ message: "unauthorized" });
+    }
+    // console.log("got token finally:", decoded);
+    req.decodedUser = decoded;
+    next();
+    // if token is valid then it would be decoded
+  });
+};
+// my middleware end
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     const serviceCollection = client.db("carDoctor").collection("services");
     const bookingCollection = client.db("carDoctor").collection("bookings");
-
     // main code here
-    app.get("/services", async (req, res) => {
+    // auth related api
+    app.post("/jwt", async (req, res) => {
+      const getData = req.body;
+      // console.log(getData);
+      const getToken = jwt.sign(getData, process.env.ACCESS_TOKEN, {
+        expiresIn: "1h",
+      });
+
+      res
+        .cookie("token", getToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "Lax",
+        })
+        .send({ success: true });
+    });
+    // services related api
+    app.get("/services", logger, async (req, res) => {
       const result = await serviceCollection.find().toArray();
       res.send(result);
     });
@@ -51,8 +102,10 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/bookings", async (req, res) => {
-      //   console.log(req.query.email);
+    app.get("/bookings", verifyTokenFirst, logger, async (req, res) => {
+      // console.log(req.query.email);
+      // console.log("got that token:", req.cookies.token);
+      console.log("got from my middleware", req.decodedUser);
       let query = {};
       if (req.query.email) {
         query = { email: req.query.email };
