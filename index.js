@@ -10,7 +10,12 @@ const port = process.env.PORT || 5000;
 // middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://car-doctor-535cf.web.app",
+      "https://car-doc.netlify.app",
+    ],
     credentials: true,
   })
 );
@@ -37,16 +42,16 @@ const logger = async (req, res, next) => {
 };
 // just check end
 const verifyTokenFirst = async (req, res, next) => {
-  const getToken = req.cookies.token;
-  // console.log("got middleware token:", getToken);
-  if (!getToken) {
-    res.status(401).send({ message: "not authorized" });
+  const token = req.cookies?.token;
+  // console.log("got middleware token:", token);
+  if (!token) {
+    return res.status(401).send({ message: "not authorized" });
   }
-  jwt.verify(getToken, process.env.ACCESS_TOKEN, (err, decoded) => {
+  jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
     // error
     if (err) {
       console.log(err);
-      res.status(401).send({ message: "unauthorized" });
+      return res.status(401).send({ message: "unauthorized" });
     }
     // console.log("got token finally:", decoded);
     req.decodedUser = decoded;
@@ -67,20 +72,20 @@ async function run() {
     app.post("/jwt", async (req, res) => {
       const getData = req.body;
       // console.log(getData);
-      const getToken = jwt.sign(getData, process.env.ACCESS_TOKEN, {
+      const token = jwt.sign(getData, process.env.ACCESS_TOKEN, {
         expiresIn: "1h",
       });
 
       res
-        .cookie("token", getToken, {
+        .cookie("token", token, {
           httpOnly: true,
-          secure: false,
-          sameSite: "Lax",
+          secure: true,
+          // sameSite: "Lax",
         })
         .send({ success: true });
     });
     // services related api
-    app.get("/services", logger, async (req, res) => {
+    app.get("/services", async (req, res) => {
       const result = await serviceCollection.find().toArray();
       res.send(result);
     });
@@ -102,10 +107,16 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/bookings", verifyTokenFirst, logger, async (req, res) => {
+    app.get("/bookings", verifyTokenFirst, async (req, res) => {
       // console.log(req.query.email);
       // console.log("got that token:", req.cookies.token);
-      console.log("got from my middleware", req.decodedUser);
+      // console.log("got from my middleware", req.decodedUser.email.toLowerCase());
+      if (
+        req.query.email.toLowerCase() !== req.decodedUser.email.toLowerCase()
+      ) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
       let query = {};
       if (req.query.email) {
         query = { email: req.query.email };
