@@ -11,10 +11,8 @@ const port = process.env.PORT || 5000;
 app.use(
   cors({
     origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://car-doctor-535cf.web.app",
-      "https://car-doc.netlify.app",
+      "https://car-doctor-535cf.web.app", 
+      "https://car-doc.netlify.app"
     ],
     credentials: true,
   })
@@ -50,8 +48,8 @@ const verifyTokenFirst = async (req, res, next) => {
   jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
     // error
     if (err) {
-      console.log(err);
-      return res.status(401).send({ message: "unauthorized" });
+      // console.log(err);
+      return res.status(401).send({ message: "unauthorized access" });
     }
     // console.log("got token finally:", decoded);
     req.decodedUser = decoded;
@@ -70,27 +68,33 @@ async function run() {
     // main code here
     // auth related api
     app.post("/jwt", async (req, res) => {
-      const getData = req.body;
-      // console.log(getData);
-      const token = jwt.sign(getData, process.env.ACCESS_TOKEN, {
-        expiresIn: "1h",
+      const getEmail = req.body;
+      // console.log(getEmail);
+      const getToken = jwt.sign(getEmail, process.env.ACCESS_TOKEN, {
+        expiresIn: "10h",
       });
 
       res
-        .cookie("token", token, {
+        .cookie("token", getToken, {
           httpOnly: true,
           secure: true,
-          // sameSite: "Lax",
+          sameSite: "none",
         })
         .send({ success: true });
     });
+
+    app.post("/logout", async (req, res) => {
+      res.clearCookie("token", { maxAge: 0 }).send({ success: true });
+    });
+
+    // auth related api end
     // services related api
     app.get("/services", async (req, res) => {
       const result = await serviceCollection.find().toArray();
       res.send(result);
     });
 
-    app.get("/services/:id", async (req, res) => {
+    app.get("/services/:id", verifyTokenFirst, async (req, res) => {
       const paramsId = req.params.id;
       const query = { _id: new ObjectId(paramsId) };
       const options = {
@@ -110,10 +114,11 @@ async function run() {
     app.get("/bookings", verifyTokenFirst, async (req, res) => {
       // console.log(req.query.email);
       // console.log("got that token:", req.cookies.token);
-      // console.log("got from my middleware", req.decodedUser.email.toLowerCase());
-      if (
-        req.query.email.toLowerCase() !== req.decodedUser.email.toLowerCase()
-      ) {
+      // console.log(
+      //   "got from my middleware",
+      //   req.decodedUser.email.toLowerCase()
+      // );
+      if (req.query.email !== req.decodedUser.email) {
         return res.status(403).send({ message: "forbidden access" });
       }
 
